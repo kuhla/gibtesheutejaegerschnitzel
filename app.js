@@ -18,6 +18,9 @@ function reset() {
   $('message').textContent = no;
   document.body.classList.remove('yes');
   $('symbol').textContent = '–';
+  $('next-date').textContent = 'Noch kein aktuelles Vorschauergebnis.';
+  $('next-detail').textContent = 'Ab morgen, soweit bereits angekündigt.';
+  $('next-coverage').textContent = '';
 }
 
 function unavailable(message) {
@@ -29,6 +32,27 @@ function unavailable(message) {
     $('source-' + i).className = 'error';
   });
   $('checked').textContent = 'Keine aktuelle Prüfung verfügbar';
+}
+
+function renderForecast(forecast) {
+  if (!forecast) return;
+  const dateLabel = value => new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  }).format(new Date(value + 'T12:00:00Z'));
+  if (forecast.next && forecast.next.date > berlinDate()) {
+    $('next-date').textContent = dateLabel(forecast.next.date);
+    $('next-detail').textContent = forecast.next.sources.map(source => source.name).join(' und ') +
+      (forecast.complete ? ' · Frühester angekündigter Termin nach heute.' :
+        ' · Frühester gefundener Termin; die Vorschau ist nur teilweise prüfbar.');
+  } else {
+    $('next-date').textContent = forecast.complete ? 'Noch kein weiterer Termin angekündigt.' :
+      'Der nächste Termin ist gerade nicht vollständig prüfbar.';
+    $('next-detail').textContent = 'In den abrufbaren kommenden Speiseplänen wurde bisher kein Jägerschnitzel gefunden.';
+  }
+  $('next-coverage').textContent = forecast.sources.map(source =>
+    source.name + ': ' + (source.through ? 'Plan bis ' + dateLabel(source.through) :
+      source.ok ? 'noch keine kommenden Tage veröffentlicht' : 'Vorschau nicht abrufbar') +
+      (source.through && !source.ok ? ' (unvollständig)' : '')).join(' · ');
 }
 
 async function update() {
@@ -69,6 +93,7 @@ async function update() {
       element.textContent = source.found ? source.matches.join(' · ') : source.note;
       element.className = source.found ? 'match' : source.ok ? '' : 'error';
     });
+    renderForecast(data.forecast);
     const warnings = [];
     if (!data.complete) warnings.push('Die Prüfung ist unvollständig: Mindestens ein Speiseplan war nicht abrufbar.');
     if (Date.now() - checkedAt.getTime() > 90 * 60 * 1000) {

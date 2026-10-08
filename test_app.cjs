@@ -99,3 +99,28 @@ test('Berlin-Datum berücksichtigt Sommer- und Winterzeit', async()=>{
   assert.equal(vm.runInContext("berlinDate(new Date('2026-07-01T22:30:00Z'))",app.context),'2026-07-02');
   assert.equal(vm.runInContext("berlinDate(new Date('2026-01-01T22:30:00Z'))",app.context),'2026-01-01');
 });
+
+test('Zukünftiger Termin nennt Datum und beide Küchen', async()=>{
+  const data=status();data.forecast={complete:true,next:{date:'2026-10-12',sources:[{name:'Mensa'},{name:'Café'}]},sources:[]};
+  const app=run(data);await app.settled();
+  assert.match(app.elements.get('next-date').textContent,/Montag, 12\. Oktober 2026/);
+  assert.match(app.elements.get('next-detail').textContent,/Mensa und Café/);
+  assert.match(app.elements.get('message').textContent,/^Leider/);
+});
+
+test('Keine Ankündigung und Ausfall werden unterschieden', async()=>{
+  for (const complete of [true,false]) {
+    const data=status();data.forecast={complete,next:null,sources:[]};
+    const app=run(data);await app.settled();
+    assert.match(app.elements.get('next-date').textContent,complete?/kein weiterer Termin/:/nicht vollständig prüfbar/);
+  }
+});
+
+test('Vorschau verschwindet ebenfalls beim Tageswechsel', async()=>{
+  const data=status();data.checkedAt='2026-10-08T21:40:00Z';
+  data.forecast={complete:true,next:{date:'2026-10-09',sources:[{name:'Mensa'}]},sources:[]};
+  const app=run(data,'2026-10-08T21:59:59Z');await app.settled();
+  assert.match(app.elements.get('next-date').textContent,/9\. Oktober/);
+  app.setTime('2026-10-08T22:00:00Z');app.intervals.find(i=>i.ms===1000).fn();
+  await app.settled();assert.match(app.elements.get('next-date').textContent,/kein aktuelles/i);
+});

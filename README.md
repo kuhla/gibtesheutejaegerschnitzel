@@ -40,6 +40,16 @@ Offizielle Anleitung: [GitHub Pages mit Actions](https://docs.github.com/en/page
 - Café Freundlich: nur Text zwischen der Überschrift `Heute` und der nächsten Überschrift. Skripte, Kommentare und kommende Tage zählen nicht.
 - Abruffehler erscheinen separat. Ein Treffer einer funktionierenden Quelle reicht auch dann, wenn die andere ausfällt. Ohne positiven Treffer bleibt bei Fehlern die Standardmeldung stehen.
 
+## Nächster Jägerschnitzel-Termin
+
+Unter „Das nächste Mal“ steht der früheste veröffentlichte Termin **nach heute** mit Datum und Küche. Gibt es am selben frühesten Tag in beiden Küchen Jägerschnitzel, werden beide genannt. Die Hauptmeldung prüft weiterhin ausschließlich heute.
+
+- Mensa: verbleibende Tage der aktuellen Woche und die konfigurierte Wochenvorschau (derzeit drei weitere Wochen, technisch auf acht begrenzt). Noch nicht veröffentlichte Wochen werden übersprungen.
+- Café: datierte Menügruppen unter „Die kommenden Tage“. Der Heute-Abschnitt, Skripte und die Fußzeile zählen hier nicht.
+- Ohne Treffer erscheint „Noch kein weiterer Termin angekündigt“. Das bedeutet nur, dass die veröffentlichten Pläne keinen Treffer enthalten.
+- Bei Abruffehlern wird eine unvollständige Vorschau kenntlich gemacht. Ein trotzdem gefundener Termin bleibt sichtbar, ist dann aber nur der früheste bekannte Treffer.
+- Die Anzeige nennt pro Quelle den letzten veröffentlichten Tag im geprüften Zeitraum. Die Vorschau wird zusammen mit dem heutigen Ergebnis aktualisiert und bei veralteten Tagesdaten zurückgesetzt.
+
 ## Lokal ausprobieren
 
 Python 3.10 oder neuer genügt; es werden keine zusätzlichen Python-Pakete benötigt.

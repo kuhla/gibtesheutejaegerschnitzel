@@ -5,6 +5,12 @@ import server
 
 
 class MenuTests(unittest.TestCase):
+    def setUp(self):
+        # Bestehende Heute-Tests benötigen keine echte Vorschau-Netzwerkanfrage.
+        patcher = patch.object(server, 'get_forecast', return_value={'next': None, 'complete': True, 'sources': []})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_spellings_and_case(self):
         for text in ('Jägerschnitzel', 'JAEGERSCHNITZEL mit Nudeln', 'Ja\u0308gerschnitzel'):
             self.assertTrue(server.contains_schnitzel(text))

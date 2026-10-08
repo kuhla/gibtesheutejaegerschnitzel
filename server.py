@@ -2,7 +2,7 @@
 """Jägerschnitzel-Check. Python 3.10+, keine externen Pakete."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -95,6 +95,77 @@ def cafe_today(html):
     return [' '.join(line.split()) for line in ''.join(parser.parts).splitlines() if line.strip()]
 
 
+class FutureCafeParser(HTMLParser):
+    """Datierte Menügruppen unter „Die kommenden Tage“, ohne Fußzeile/Skripte."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.heading = None
+        self.heading_text = []
+        self.upcoming = False
+        self.found = False
+        self.day = None
+        self.days = {}
+        self.content_depth = 0
+        self.ignored = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style', 'template'):
+            self.ignored += 1
+        if self.ignored:
+            return
+        if re.fullmatch(r'h[1-6]', tag):
+            self.heading = tag
+            self.heading_text = []
+        if tag == 'div':
+            classes = dict(attrs).get('class', '').split()
+            if self.content_depth:
+                self.content_depth += 1
+            elif self.upcoming and self.day and 'ctlg_group_content' in classes:
+                self.content_depth = 1
+        if self.content_depth and tag in ('div', 'p', 'li', 'br'):
+            self.days[self.day].append('\n')
+
+    def handle_endtag(self, tag):
+        if tag in ('script', 'style', 'template'):
+            self.ignored = max(0, self.ignored - 1)
+            return
+        if self.ignored:
+            return
+        if tag == self.heading:
+            title = ' '.join(''.join(self.heading_text).split())
+            self.day = None
+            if title.casefold() == 'die kommenden tage':
+                self.upcoming = self.found = True
+            elif self.upcoming:
+                match = re.fullmatch(r'(?:Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag),\s*(\d{2}\.\d{2}\.\d{4})', title)
+                if match:
+                    self.day = datetime.strptime(match[1], '%d.%m.%Y').date()
+                    self.days.setdefault(self.day, [])
+                else:
+                    self.upcoming = False
+            self.heading = None
+        if tag == 'div' and self.content_depth:
+            self.days[self.day].append('\n')
+            self.content_depth -= 1
+
+    def handle_data(self, text):
+        if self.ignored:
+            return
+        if self.heading:
+            self.heading_text.append(text)
+        elif self.content_depth and self.day:
+            self.days[self.day].append(text)
+
+
+def cafe_future(html, today):
+    parser = FutureCafeParser()
+    parser.feed(html)
+    if not parser.found:
+        raise ValueError('Der Abschnitt für kommende Tage fehlt.')
+    return {day: [' '.join(line.split()) for line in ''.join(parts).splitlines() if line.strip()]
+            for day, parts in parser.days.items() if day > today}
+
+
 def decode_value(value):
     if 'mapValue' in value:
         return {k: decode_value(v) for k, v in value['mapValue'].get('fields', {}).items()}
@@ -128,6 +199,7 @@ class MensaClient:
         self.token = None
         self.expires = 0
         self.environment = None
+        self.weeks = {}
 
     def authenticate(self):
         if self.token and time.monotonic() < self.expires:
@@ -140,9 +212,12 @@ class MensaClient:
         self.environment = identity['Environment']
         self.expires = time.monotonic() + int(auth.get('expiresIn', 3600)) - 120
 
-    def today(self, day):
-        self.authenticate()
+    def week(self, day):
         year, week, _ = day.isocalendar()
+        key = (year, week)
+        if key in self.weeks and self.weeks[key][0] > time.monotonic():
+            return self.weeks[key][1]
+        self.authenticate()
         path = f'{self.environment}/de-DE/Menus/17728/Years/{year}/Weeks/{week}'
         try:
             data = json.loads(fetch(f'{FIRESTORE}/{path}', headers={'Authorization': 'Bearer ' + self.token}))
@@ -150,9 +225,41 @@ class MensaClient:
             if error.code in (401, 403):
                 self.expires = 0
             if error.code == 404:
-                raise ValueError('Für diese Woche wurde kein Menü veröffentlicht.') from error
+                return None  # Noch nicht veröffentlicht, kein Abruffehler.
             raise
-        return menu_today(decode_value({'mapValue': data}), day)
+        menu = decode_value({'mapValue': data})
+        if not isinstance(menu.get('Days'), list):
+            raise ValueError('Keine lesbare Tagesstruktur.')
+        self.weeks[key] = (time.monotonic() + 300, menu)
+        return menu
+
+    def today(self, day):
+        menu = self.week(day)
+        if menu is None:
+            raise ValueError('Für diese Woche wurde kein Menü veröffentlicht.')
+        return menu_today(menu, day)
+
+    def future(self, today):
+        days = {}
+        complete = True
+        preview = 3
+        # Aktuelle Woche plus die von der Mensa konfigurierte Vorschau (maximal 8).
+        for offset in range(9):
+            if offset > preview:
+                break
+            try:
+                menu = self.week(today + timedelta(weeks=offset))
+                if menu is None:
+                    continue
+                if offset == 0:
+                    preview = max(0, min(8, int(menu.get('WeeksToPreview', 3))))
+                for entry in menu['Days']:
+                    day = date.fromisoformat(str(entry['Date'])[:10])
+                    if day > today:
+                        days[day] = menu_today(menu, day)
+            except Exception:
+                complete = False
+        return days, complete
 
 
 mensa = MensaClient()
@@ -172,6 +279,39 @@ def check_source(name, url, reader):
                 'note': 'Speiseplan konnte nicht geprüft werden'}
 
 
+def get_forecast(today):
+    def mensa_reader():
+        return mensa.future(today)
+
+    def cafe_reader():
+        return cafe_future(fetch(CAFE_URL), today), True
+
+    def read(name, url, reader):
+        try:
+            days, complete = reader()
+            hits = [{'date': day.isoformat(), 'matches': list(dict.fromkeys(
+                line for line in lines if contains_schnitzel(line)))}
+                for day, lines in sorted(days.items())
+                if day > today and any(contains_schnitzel(line) for line in lines)]
+            return {'name': name, 'url': url, 'ok': complete, 'hits': hits,
+                    'through': max(days).isoformat() if days else None}
+        except Exception:
+            return {'name': name, 'url': url, 'ok': False, 'hits': [], 'through': None}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(read, 'Mensa · Widynski & Roick', MENSA_URL, mensa_reader)
+        second = pool.submit(read, 'Café Freundlich', CAFE_URL, cafe_reader)
+        sources = [first.result(), second.result()]
+    next_date = min((hit['date'] for source in sources for hit in source['hits']), default=None)
+    upcoming = None
+    if next_date:
+        upcoming = {'date': next_date, 'sources': [
+            {'name': source['name'], 'url': source['url'], 'matches': hit['matches']}
+            for source in sources for hit in source['hits'] if hit['date'] == next_date]}
+    return {'next': upcoming, 'complete': all(source['ok'] for source in sources),
+            'sources': [{key: source[key] for key in ('name', 'url', 'ok', 'through')} for source in sources]}
+
+
 def get_status():
     global _cache, _cache_until
     with _lock:
@@ -182,6 +322,7 @@ def get_status():
             first = pool.submit(check_source, 'Mensa · Widynski & Roick', MENSA_URL, lambda: mensa.today(now.date()))
             second = pool.submit(check_source, 'Café Freundlich', CAFE_URL, lambda: cafe_today(fetch(CAFE_URL)))
             sources = [first.result(), second.result()]
+        forecast = get_forecast(now.date())
         # Bei einem Tageswechsel während des Abrufs niemals den Vortag als heute ausliefern.
         if datetime.now(BERLIN).date() != now.date():
             return {'date': datetime.now(BERLIN).date().isoformat(), 'checkedAt': None, 'found': False,
@@ -189,8 +330,8 @@ def get_status():
         found = any(source['found'] for source in sources)
         _cache = {'date': now.date().isoformat(), 'checkedAt': datetime.now(BERLIN).isoformat(),
                   'found': found, 'message': YES if found else NO,
-                  'complete': all(source['ok'] for source in sources), 'sources': sources}
-        _cache_until = time.monotonic() + (300 if _cache['complete'] else 30)
+                  'complete': all(source['ok'] for source in sources), 'sources': sources, 'forecast': forecast}
+        _cache_until = time.monotonic() + (300 if _cache['complete'] and forecast['complete'] else 30)
         return _cache
 
 
