@@ -18,7 +18,7 @@ function reset() {
   $('message').textContent = no;
   document.body.classList.remove('yes');
   $('symbol').textContent = '–';
-  $('next-date').textContent = 'Noch kein aktuelles Vorschauergebnis.';
+  $('next-date').textContent = 'Wir wissen noch nicht, wann es das nächste Mal Jägerschnitzel gibt.';
   $('next-detail').textContent = 'Ab morgen, soweit bereits angekündigt.';
   $('next-coverage').textContent = '';
 }
@@ -40,14 +40,15 @@ function renderForecast(forecast) {
     timeZone: 'Europe/Berlin', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   }).format(new Date(value + 'T12:00:00Z'));
   if (forecast.next && forecast.next.date > berlinDate()) {
-    $('next-date').textContent = dateLabel(forecast.next.date);
+    $('next-date').textContent = 'Das nächste Jägerschnitzel gibt es am ' + dateLabel(forecast.next.date) + '.';
     $('next-detail').textContent = forecast.next.sources.map(source => source.name).join(' und ') +
       (forecast.complete ? ' · Frühester angekündigter Termin nach heute.' :
         ' · Frühester gefundener Termin; die Vorschau ist nur teilweise prüfbar.');
   } else {
-    $('next-date').textContent = forecast.complete ? 'Noch kein weiterer Termin angekündigt.' :
-      'Der nächste Termin ist gerade nicht vollständig prüfbar.';
-    $('next-detail').textContent = 'In den abrufbaren kommenden Speiseplänen wurde bisher kein Jägerschnitzel gefunden.';
+    $('next-date').textContent = 'Wir wissen noch nicht, wann es das nächste Mal Jägerschnitzel gibt.';
+    $('next-detail').textContent = forecast.complete
+      ? 'In den veröffentlichten kommenden Speiseplänen ist bisher keines angekündigt.'
+      : 'Die kommenden Speisepläne sind gerade nicht vollständig prüfbar.';
   }
   $('next-coverage').textContent = forecast.sources.map(source =>
     source.name + ': ' + (source.through ? 'Plan bis ' + dateLabel(source.through) :

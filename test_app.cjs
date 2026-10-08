@@ -103,7 +103,7 @@ test('Berlin-Datum berücksichtigt Sommer- und Winterzeit', async()=>{
 test('Zukünftiger Termin nennt Datum und beide Küchen', async()=>{
   const data=status();data.forecast={complete:true,next:{date:'2026-10-12',sources:[{name:'Mensa'},{name:'Café'}]},sources:[]};
   const app=run(data);await app.settled();
-  assert.match(app.elements.get('next-date').textContent,/Montag, 12\. Oktober 2026/);
+  assert.equal(app.elements.get('next-date').textContent,'Das nächste Jägerschnitzel gibt es am Montag, 12. Oktober 2026.');
   assert.match(app.elements.get('next-detail').textContent,/Mensa und Café/);
   assert.match(app.elements.get('message').textContent,/^Leider/);
 });
@@ -112,7 +112,8 @@ test('Keine Ankündigung und Ausfall werden unterschieden', async()=>{
   for (const complete of [true,false]) {
     const data=status();data.forecast={complete,next:null,sources:[]};
     const app=run(data);await app.settled();
-    assert.match(app.elements.get('next-date').textContent,complete?/kein weiterer Termin/:/nicht vollständig prüfbar/);
+    assert.equal(app.elements.get('next-date').textContent,'Wir wissen noch nicht, wann es das nächste Mal Jägerschnitzel gibt.');
+    assert.match(app.elements.get('next-detail').textContent,complete?/bisher keines angekündigt/:/nicht vollständig prüfbar/);
   }
 });
 
@@ -122,5 +123,5 @@ test('Vorschau verschwindet ebenfalls beim Tageswechsel', async()=>{
   const app=run(data,'2026-10-08T21:59:59Z');await app.settled();
   assert.match(app.elements.get('next-date').textContent,/9\. Oktober/);
   app.setTime('2026-10-08T22:00:00Z');app.intervals.find(i=>i.ms===1000).fn();
-  await app.settled();assert.match(app.elements.get('next-date').textContent,/kein aktuelles/i);
+  await app.settled();assert.match(app.elements.get('next-date').textContent,/Wir wissen noch nicht/);
 });

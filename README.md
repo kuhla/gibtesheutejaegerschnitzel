@@ -46,7 +46,7 @@ Unter „Das nächste Mal“ steht der früheste veröffentlichte Termin **nach 
 
 - Mensa: verbleibende Tage der aktuellen Woche und die konfigurierte Wochenvorschau (derzeit drei weitere Wochen, technisch auf acht begrenzt). Noch nicht veröffentlichte Wochen werden übersprungen.
 - Café: datierte Menügruppen unter „Die kommenden Tage“. Der Heute-Abschnitt, Skripte und die Fußzeile zählen hier nicht.
-- Ohne Treffer erscheint „Noch kein weiterer Termin angekündigt“. Das bedeutet nur, dass die veröffentlichten Pläne keinen Treffer enthalten.
+- Ohne Treffer erscheint „Wir wissen noch nicht, wann es das nächste Mal Jägerschnitzel gibt.“. Das bedeutet nur, dass die veröffentlichten Pläne keinen Treffer enthalten.
 - Bei Abruffehlern wird eine unvollständige Vorschau kenntlich gemacht. Ein trotzdem gefundener Termin bleibt sichtbar, ist dann aber nur der früheste bekannte Treffer.
 - Die Anzeige nennt pro Quelle den letzten veröffentlichten Tag im geprüften Zeitraum. Die Vorschau wird zusammen mit dem heutigen Ergebnis aktualisiert und bei veralteten Tagesdaten zurückgesetzt.
 
