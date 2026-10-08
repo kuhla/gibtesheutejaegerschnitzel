@@ -1,0 +1,54 @@
+name: Speiseplaene pruefen und Website veroeffentlichen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # UTC, durchgehend alle 30 Minuten; Berlin-Datum bestimmt das Python-Skript.
+    # Nicht zur vollen Stunde, um Lastspitzen zu vermeiden.
+    - cron: '7,37 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v6
+      - name: Python einrichten
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Python-Tests
+        run: python -m unittest -v
+      - name: JavaScript-Tests
+        run: node --test test_app.cjs
+      - name: Speiseplaene abrufen und Website erstellen
+        run: python build_site.py
+      - name: Website bereitstellen
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Auf GitHub Pages veroeffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4
